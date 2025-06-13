@@ -1,26 +1,28 @@
 import os
-import subprocess
-import datetime
+from git import Repo
 
 def push_to_github():
-    repo_url = f"https://{os.getenv('GITHUB_TOKEN')}@github.com/{os.getenv('GITHUB_REPO')}.git"
-    commit_msg = f"🔄 Auto-pushed at {datetime.datetime.utcnow().isoformat()}"
+    repo_dir = os.getcwd()
+    repo = Repo.init(repo_dir)
 
-    try:
-        # Git тохиргоонууд
-        subprocess.run(["git", "config", "--global", "user.email", "tenguun@bot.ai"], check=True)
-        subprocess.run(["git", "config", "--global", "user.name", "TenguunBot"], check=True)
+    github_token = os.getenv("GITHUB_TOKEN")
+    github_repo = os.getenv("GITHUB_REPO")
 
-        # Git коммандууд
-        subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", commit_msg], check=True)
-        subprocess.run(["git", "branch", "-M", "main"], check=True)
-        subprocess.run(["git", "remote", "add", "origin", repo_url], check=True)
-        subprocess.run(["git", "push", "-u", "origin", "main", "--force"], check=True)
+    if not github_token or not github_repo:
+        raise Exception("❌ .env файлд GITHUB_TOKEN эсвэл GITHUB_REPO алга байна!")
 
-        print("✅ Код амжилттай GitHub руу push хийгдлээ!")
-    except subprocess.CalledProcessError as e:
-        print("❌ Алдаа гарлаа:", e)
+    origin_url = f"https://{github_token}@github.com/{github_repo}.git"
+
+    if "origin" not in [remote.name for remote in repo.remotes]:
+        repo.create_remote("origin", origin_url)
+    else:
+        repo.delete_remote("origin")
+        repo.create_remote("origin", origin_url)
+
+    repo.git.add(A=True)
+    repo.index.commit("🤖 Auto-pushed from Replit via push_code.py")
+    repo.git.push("origin", "main", force=True)
+    print("✅ Код амжилттай GitHub руу push хийгдлээ!")
 
 if __name__ == "__main__":
     push_to_github()

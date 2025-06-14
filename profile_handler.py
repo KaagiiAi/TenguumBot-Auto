@@ -1,11 +1,14 @@
+import datetime
 from firebase_admin import db
-from datetime import datetime
 
-async def init_user_profile(bot_id, user):
-    user_ref = db.reference(f"bots/{bot_id}/users/{user.id}/profile")
-    if not user_ref.get():
-        user_ref.set({
-            "name": user.full_name,
-            "telegram_id": user.id,
-            "created_at": datetime.utcnow().isoformat()
-        })
+def store_profile(bot_id, user_id, name):
+    ref = db.reference(f'bots/{bot_id}/users/{user_id}/profile')
+    ref.set({
+        'name': name,
+        'telegram_id': user_id,
+        'created_at': datetime.datetime.now().isoformat()
+    })
+
+def load_profile(bot_id, user_id):
+    ref = db.reference(f'bots/{bot_id}/users/{user_id}/profile')
+    return ref.get()

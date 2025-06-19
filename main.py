@@ -1,7 +1,13 @@
-import os, json, base64, logging, requests
+import os
+import json
+import base64
+import logging
+import requests
 from datetime import datetime
+
 import firebase_admin
 from firebase_admin import credentials, db
+
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -11,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-# ✅ Firebase түлхүүрийг ачааллах
+# ✅ Firebase KEY-г ачааллах
 firebase_key_str = os.getenv("FIREBASE_KEY_BASE64")
 key_json_str = base64.b64decode(firebase_key_str).decode("utf-8")
 firebase_cert = json.loads(key_json_str)
@@ -22,20 +28,7 @@ if not firebase_admin._apps:
         'databaseURL': 'https://tenguunbotmemory-default-rtdb.firebaseio.com'
     })
 
-# ✅ Telegram webhook автоматаар устгах
-def delete_webhook():
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    url = f"https://api.telegram.org/bot{token}/deleteWebhook"
-    try:
-        response = requests.post(url)
-        if response.status_code == 200:
-            print("✅ Webhook амжилттай устлаа")
-        else:
-            print("⚠️ Webhook устгаж чадсангүй:", response.text)
-    except Exception as e:
-        print("❌ Webhook устгах үед алдаа гарлаа:", e)
-
-# ✅ Firebase замууд
+# ✅ Firebase функцууд
 def get_user_ref(user_id):
     return db.reference(f"bots/tenguun/users/{user_id}")
 
@@ -62,19 +55,41 @@ def update_status(user_id, status):
     ref = get_user_ref(user_id).child("profile/status")
     ref.set(status)
 
+def delete_profile(user_id):
+    get_user_ref(user_id).delete()
+
+# ✅ Craiyon зураг үүсгэх
 def generate_image(prompt):
     response = requests.post("https://backend.craiyon.com/generate", json={"prompt": prompt})
     if response.status_code == 200:
         data = response.json()
-        images = data.get("images", [])
-        return images
+        return data.get("images", [])
     return []
 
-# ✅ Bot командууд
+# ✅ ChatGPT хариу үүсгэх
+def generate_chatgpt_response(user_input):
+    api_key = os.getenv("OPENAI_API_KEY")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "gpt-3.5-turbo",
+        "messages": [
+            {"role": "system", "content": "You are Tenguun, a helpful AI assistant."},
+            {"role": "user", "content": user_input}
+        ]
+    }
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    if response.status_code == 200:
+        return response.json()["choices"][0]["message"]["content"]
+    return "⚠️ Хариу үүсгэж чадсангүй."
+
+# ✅ Коммандууд
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     save_profile(user.id, user.username or user.full_name)
-    await update.message.reply_text("🤖 TenguunBot-д тавтай морил!")
+    await update.message.reply_text("👋 Сайн байна уу! Таны мэдээллийг хадгаллаа.")
 
 async def goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -86,7 +101,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     status_text = " ".join(context.args)
     update_status(user.id, status_text)
-    await update.message.reply_text(f"📌 Байдал: {status_text}")
+    await update.message.reply_text(f"📌 Одоогийн байдал: {status_text}")
 
 async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -102,19 +117,28 @@ async def imagegen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = " ".join(context.args)
     images = generate_image(prompt)
     if images:
-        for img in images[:1]:
-            url = f"https://img.craiyon.com/{img}"
-            await update.message.reply_photo(photo=url)
+        url = f"https://img.craiyon.com/{images[0]}"
+        await update.message.reply_photo(photo=url)
     else:
         await update.message.reply_text("❌ Зураг үүсгэж чадсангүй.")
 
+async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    delete_profile(user.id)
+    await update.message.reply_text("♻️ Бүх мэдээллийг устгалаа!")
+
+async def version_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🤖 TenguunBot v4.0 | Firebase + OpenAI + Craiyon")
+
+# ✅ Мессеж хүлээн авах
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     save_message(user.id, update.message.text)
-    await update.message.reply_text("✅ Мэдээлэл хүлээн авлаа!")
+    response = generate_chatgpt_response(update.message.text)
+    await update.message.reply_text(response)
 
-# ✅ Bot-г эхлүүлэх
-delete_webhook()
+# ✅ Bot эхлүүлэх
+logging.basicConfig(level=logging.INFO)
 app = ApplicationBuilder().token(os.environ["TELEGRAM_BOT_TOKEN"]).build()
 
 app.add_handler(CommandHandler("start", start))
@@ -122,7 +146,8 @@ app.add_handler(CommandHandler("goal", goal))
 app.add_handler(CommandHandler("status", status))
 app.add_handler(CommandHandler("whoami", whoami))
 app.add_handler(CommandHandler("image", imagegen))
+app.add_handler(CommandHandler("reset", reset_command))
+app.add_handler(CommandHandler("version", version_command))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-print("🚀 TenguunBot started...")
 app.run_polling()

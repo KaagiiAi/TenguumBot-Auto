@@ -1,3 +1,5 @@
+import subprocess
+subprocess.run(["python3", "auto_push.py"])
 import os
 import json
 import base64

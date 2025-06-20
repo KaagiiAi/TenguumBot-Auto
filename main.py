@@ -1,48 +1,59 @@
 import os
 import logging
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
-import subprocess
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+from openai_handler import generate_chatgpt_response
+from profile_handler import handle_profile
+from memory_handler import save_user_message
+from classify_handler import classify_command
+from execute_handler import execute_command
+from push_code import push_to_github
 
-# ✅ Лог тохиргоо
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# ✅ Bot Token
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # ✅ Коммандууд
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Сайн байна уу! TenguunBot Universal ажиллаж байна!")
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"👋 Сайн байна уу! TenguunBot Universal ажиллаж байна!")
 
-async def push(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📊 Auto Sync идэвхтэй байна!")
+
+async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🚀 Код GitHub руу push хийгдэж байна...")
-    result = subprocess.run(["python3", "push_code.py"], capture_output=True, text=True)
-    await update.message.reply_text(f"✅ Push үр дүн:\n{result.stdout or result.stderr}")
+    result = push_to_github()
+    await update.message.reply_text(f"✅ Push үр дүн:\n{result}")
 
-async def updatebot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def updatebot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("♻️ Bot шинэчлэгдэж байна...")
-    result = subprocess.run(["python3", "updatebot.py"], capture_output=True, text=True)
-    await update.message.reply_text(f"✅ Update үр дүн:\n{result.stdout or result.stderr}")
+    os.system("python3 main.py &")
+    await update.message.reply_text("✅ Update үр дүн:")
 
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 Auto Sync идэвхтэй байна!\n🟢 push_code.py болон updatebot.py бүрэн ажиллагаатай.")
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_text = update.message.text
+    save_user_message(user_id, user_text)
+    response = generate_chatgpt_response(user_text)
+    await update.message.reply_text(response)
 
-async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Танд туслах комманд олдсонгүй.")
+# ✅ Bot эхлүүлэх
+app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-# ✅ Апп эхлүүлэх
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+app.add_handler(CommandHandler("start", start_command))
+app.add_handler(CommandHandler("status", status_command))
+app.add_handler(CommandHandler("push", push_command))
+app.add_handler(CommandHandler("updatebot", updatebot_command))
+app.add_handler(CommandHandler("classify", classify_command))
+app.add_handler(CommandHandler("execute", execute_command))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# ✅ Комманд бүртгэх
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("push", push))
-app.add_handler(CommandHandler("updatebot", updatebot))
-app.add_handler(CommandHandler("status", status))
-app.add_handler(MessageHandler(filters.COMMAND, unknown))
-
-# ✅ Polling эхлүүлэх
-print("🤖 Auto Sync Bot ажиллаж эхэллээ...")
 app.run_polling()

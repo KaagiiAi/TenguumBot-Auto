@@ -12,3 +12,6 @@ def store_profile(bot_id, user_id, name):
 def load_profile(bot_id, user_id):
     ref = db.reference(f'bots/{bot_id}/users/{user_id}/profile')
     return ref.get()
+    # profile_handler.py
+def handle_profile(user_id):
+    print(f"Profile data not handled for {user_id} (function placeholder)")

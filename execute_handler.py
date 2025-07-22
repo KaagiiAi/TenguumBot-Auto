@@ -1,20 +1,26 @@
-from firebase_admin import db
 from telegram import Update
 from telegram.ext import ContextTypes
+from firebase_admin import db
 
 async def execute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    ref = db.reference(f'bots/tenguun/users/{user_id}/tasks')
-    tasks = ref.get()
-
-    if not tasks:
-        await update.message.reply_text("📭 Гүйцэтгэх даалгавар олдсонгүй.")
+    if not context.args:
+        await update.message.reply_text("❗ Даалгаврын ID-г оруулна уу: /execute [id]")
         return
 
-    done = 0
-    for key, value in tasks.items():
-        if value.get("status") == "pending":
-            ref.child(key).update({"status": "done"})
-            done += 1
+    task_id = context.args[0]
+    ref = db.reference(f"bots/tenguun/users/{user_id}/tasks/{task_id}")
+    task = ref.get()
 
-    await update.message.reply_text(f"✅ Гүйцэтгэсэн даалгавар: {done} ширхэг.")
+    if not task:
+        await update.message.reply_text("⚠️ Ийм ID-тай даалгавар олдсонгүй.")
+        return
+
+    if task.get("done"):
+        await update.message.reply_text("✅ Энэ даалгавар аль хэдийн гүйцэтгэсэн байна.")
+        return
+
+    task["done"] = True
+    ref.update(task)
+
+    await update.message.reply_text(f"🤖 Даалгавар гүйцэтгэсэн: {task['text']}")

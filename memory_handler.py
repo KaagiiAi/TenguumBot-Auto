@@ -1,16 +1,9 @@
+import firebase_admin
 from firebase_admin import db
-import datetime
 
-def save_message(bot_id, user_id, message):
-    ref = db.reference(f'bots/{bot_id}/users/{user_id}/messages')
-    ref.push({
-        "message": message,
-        "timestamp": datetime.datetime.now().isoformat()
-    })
+async def memory_command(update, context):
+    await update.message.reply_text("🧠 Ой санамжийг дуудаж байна...")
 
-def get_user_messages(bot_id, user_id):
-    ref = db.reference(f'bots/{bot_id}/users/{user_id}/messages')
-    return ref.get() or {}
-
-def save_user_message(user_id, message):
-    print(f"[MEMORY] Dummy save: user_id={user_id}, message='{message}'")
+async def save_message_to_firebase(bot_id, user_id, user_text):
+    ref = db.reference(f"bots/{bot_id}/users/{user_id}/messages")
+    ref.push({"text": user_text})
